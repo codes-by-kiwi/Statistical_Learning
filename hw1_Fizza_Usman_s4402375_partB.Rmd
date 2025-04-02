@@ -1,0 +1,239 @@
+---
+title: "R Notebook - HW 1 Stats Learning s4402375"
+output: pdf_document
+---
+
+This is to load the dataset. 
+```{r}
+MH_data <- read.table("/Users/fizzausman/Downloads/MHpredict - Copy.csv", sep = ",", header = TRUE)
+```
+
+```{r}
+
+print(MH_data)
+```
+
+
+```{r}
+dim(MH_data)
+
+```
+
+installing the packages here
+```{r}
+install.packages("randomForest")
+install.packages("glmnet")
+install.packages("caret")
+```
+
+```{r}
+library(randomForest)
+library(glmnet)
+library(caret)
+```
+
+splitting the dataset into x_train,...y_test
+```{r}
+
+student_number <- 4402375 
+seed<-student_number %% 100
+set.seed(seed)
+
+
+train_indices <- sample(1:nrow(MH_data),size=1000)
+train_data <- MH_data[train_indices, ]
+test_data <- MH_data[-train_indices, ]
+target_column <- which(names(MH_data) == "dep_sev_fu")
+x_train <- train_data[,-target_column]
+y_train <- train_data[[target_column]]
+x_test <- test_data[,-target_column]
+y_test<- test_data[[target_column]]
+
+```
+
+checking class distribution 
+```{r}
+y <- MH_data[[target_column]]
+class_distribution <- table(y)
+print("Class Distribution for y:")
+print(class_distribution)
+```
+
+```{r}
+print("The class distribution for y_train is")
+class_distribution_y_train <- table(y_train)
+print(class_distribution_y_train)
+print("The class distribution for y_test is")
+class_distribution_y_test <- table(y_test)
+print(class_distribution_y_test)
+
+```
+
+
+```{r}
+library(caret)
+library(randomForest)
+```
+
+```{r}
+install.packages("MLmetrics")
+
+```
+
+```{r}
+library(MLmetrics)
+```
+
+Using random forest with a specific ntree=500, mtry=3. 
+```{r}
+randomforest_model <- randomForest(dep_sev_fu ~ ., data = train_data, ntree = 500, mtry = 3, importance = TRUE)
+
+randomforest_preds <- predict(randomforest_model, newdata = x_test)
+rf_rootmeanse <- sqrt(mean((test_data$dep_sev_fu - randomforest_preds)^2))
+print(paste("The Random Forest RMSE is:", rf_rootmeanse))
+
+accuracy <- sum(randomforest_preds == y_test) / length(y_test)
+
+print("Random forest accuracy is given below")
+print(paste("Random Forest Accuracy:", accuracy))
+
+varImpPlot(randomforest_model)
+```
+```{r}
+influence_levels <- randomforest_model$importance
+print(influence_levels)
+```
+
+
+Using cross fold validation for different mtry
+
+```{r}
+crossval <- trainControl(method = "cv", number = 10)
+
+randomforest_model_crossval <- train(dep_sev_fu ~ ., 
+                     data = train_data, 
+                     method = "rf", 
+                     trControl = crossval,
+                     tuneGrid = expand.grid(mtry = c(2, 4, 6, 8, 10)),
+                     ntree = 500)
+
+print("Best model summary is")
+print(randomforest_model_crossval$bestTune)
+
+cv_rmse_error_10 <- mean(rf_model_cv$resample$RMSE)
+print(paste("Cross-validated RMSE over 10 folds:", cv_rmse_error_10 ))
+
+cv_accuracy_10 <- mean(randomforest_model_crossval$resample$Accuracy)
+print(paste("Cross-validated Accuracy over 10 folds:", cv_accuracy_10))
+
+randomforest_predictions <- predict(rf_model_cv, newdata = test_data)
+
+rf_rmse_test <- sqrt(mean((test_data$dep_sev_fu - randomforest_predictions)^2))
+print(paste("Random Forest RMSE on test:", rf_rmse_test))
+
+accuracy <- sum(round(rf_preds) == test_data$dep_sev_fu) / length(test_data$dep_sev_fu)
+print(paste("Random Forest Accuracy on test:", accuracy))
+
+```
+
+
+Running with different number of runs
+
+```{r}
+rmse_values <- c()
+num_runs <- 5
+accuracies <- numeric(0)
+cv_rmse_values <- c()
+cv_accuracy_values <- numeric(0)
+
+for (i in 1:num_runs) {
+  set.seed(4402375 + i) 
+  
+  randforest_preds <- predict(randomforest_model_crossval, newdata = test_data)
+  rmse_values <- c(rmse_values, sqrt(mean((test_data$dep_sev_fu - randforest_preds)^2)))
+  accuracies[i] <- sum(round(randforest_preds) == test_data$dep_sev_fu) / length(test_data$dep_sev_fu)
+
+}
+
+print(paste("Average RMSE over", num_runs, "runs:", mean(rmse_values)))
+print(paste("Average Accuracy over", num_runs, "runs:", mean(accuracies)))
+```
+
+
+```{r}
+library(glmnet)
+
+
+x_train <- as.matrix(train_data[, -1])
+x_test <- as.matrix(test_data[, -1])
+
+lasso_model_l1 <- cv.glmnet(as.matrix(train_data[, -1]), train_data$dep_sev_fu, 
+                         alpha = 1, family = "gaussian", 
+                         type.measure = "mse", nfolds = 10)
+
+lasso_predictions <- predict(lasso_model_l1, newx = x_test, s = "lambda.min")
+
+lasso_rmse <- sqrt(mean((test_data$dep_sev_fu - lasso_predictions)^2))
+lasso_accuracy <- sum(round(lasso_predictions) == test_data$dep_sev_fu) / length(test_data$dep_sev_fu)
+
+print(paste("Lasso RMSE:", lasso_rmse))
+print(paste("Lasso Accuracy:", lasso_accuracy))
+
+best_lambda <- lasso_model_l1$lambda.min
+print(best_lambda)
+
+```
+
+```{r}
+print(lasso_model_l1$glmnet.fit$beta[, which.min(lasso_model_l1$cvm)])
+
+```
+
+```{r}
+importance(randomforest_model)
+varImpPlot(randomforest_model)
+```
+
+```{r}
+install.packages("pdp")
+library(pdp)
+```
+
+plotting partial dependence plots
+```{r}
+var1 <- partial(randomforest_model, pred.var = "Age", train = train_data)
+plot(var1)
+```
+
+
+```{r}
+var2 <- partial(randomforest_model, pred.var = "aedu", train = train_data)
+plot(var2)
+```
+
+
+```{r}
+var3 <- partial(randomforest_model, pred.var = "Age", train = train_data)
+plot(var3)
+
+```
+
+```{r}
+var4 <- partial(randomforest_model, pred.var = "BAI", train = train_data)
+plot(var4)
+```
+
+```{r}
+var5 <- partial(randomforest_model, pred.var = "IDS", train = train_data)
+plot(var5)
+```
+
+```{r}
+var6 <- partial(randomforest_model, pred.var = "AO", train = train_data)
+plot(var6)
+```
+
+
+
+
+
