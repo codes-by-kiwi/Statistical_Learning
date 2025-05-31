@@ -1,0 +1,612 @@
+______________________________________________________________________________________________________
+:) EVERYTHING FOR LOADING PACKAGES, GETTING DATASET 
+---
+title: "SLRcode2"
+output: html_document
+date: "2025-05-29"
+---
+
+knitting command
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+loading packages
+```{r loading packages}
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+install.packages("factoextra")  
+install.packages("psych")
+library(factoextra)  
+library(psych)
+install.packages("nFactors")
+library(nFactors)
+```
+
+______________________________________________________________________________________________________
+
+______________________________________________________________________________________________________
+:) EVERYTHING FOR READING THE DATA
+
+Reading the data
+```{r loading dataset}
+data <- read.csv("/Users/fizzausman/Downloads/merged-EOSC-ESS8e02_2.csv")
+```
+
+Printing the data
+```{r printing original dataset}
+print(data)
+```
+
+```{r keeping environ variables}
+env_vars <- data[, 537:592]
+```
+
+PCA is particularly related to environment based data of ours. 
+Some of these variables are highly correlated.
+There is a direct method in PCA that filters out low or no variance columns that dont add to the analysis.
+
+keeping only environment variables from col 537 to 592.
+
+```{r printing these env variables}
+print(env_vars)
+```
+```{r}
+str(env_vars)
+
+```
+code to check which are continuous and which are ordinal
+```{r}
+
+# Function to classify variables
+classify_variable <- function(x) {
+  if (is.numeric(x)) {
+    nunique <- length(unique(x[!is.na(x)]))
+    
+    if (nunique <= 10 && all(x %% 1 == 0, na.rm = TRUE)) {
+      return("ordinal")
+    } else {
+      return("continuous")
+    }
+  } else {
+    return("other")
+  }
+}
+
+variable_types <- sapply(env_vars, classify_variable)
+
+classification_result <- data.frame(
+  Variable = names(variable_types),
+  Type = variable_types
+)
+
+print(classification_result)
+
+continuous_vars <- names(variable_types[variable_types == "continuous"])
+ordinal_vars <- names(variable_types[variable_types == "ordinal"])
+other_vars <- names(variable_types[variable_types == "other"])
+
+cat("\nContinuous variables:\n", paste(continuous_vars, collapse = ", "))
+cat("\n\nOrdinal variables:\n", paste(ordinal_vars, collapse = ", "))
+cat("\n\nOther variables:\n", paste(other_vars, collapse = ", "))
+
+
+```
+# THIS IS THE ENTIRE PORTION FOR CONTINUOUS VARIABLE ANALYSIS
+
+
+```{r}
+vars_to_remove <- c(
+  "aqiwdpm10", "aqiwdpm2_5", "aqiwdso2", "aqiwdno2", "aqiwdo3", "aqiwd",
+  "aqiw2dpm10", "aqiw2dpm2_5", "aqiw2dso2", "aqiw2dno2", "aqiw2do3", "aqiw2d",
+  "ndyprwpm10", "ndyprwpm2_5", "ndyprwso2", "ndyprwno2", "ndyprwo3", "ndyprw",
+  "ndyprmso2", "ndypryso2"
+)
+
+env_vars_cont <- env_vars[ , !(names(env_vars) %in% vars_to_remove)]
+
+str(env_vars_cont)
+
+```
+
+______________________________________________________________________________________________________
+
+______________________________________________________________________________________________________
+
+:) JUST CHECKING ST.DEV OF EACH ENVIRONMENTAL VARIABLE
+```{r}
+variances <- apply(env_vars_cont, 2, sd)
+print(variances)
+```
+____________________________________________________________________________________________
+
+______________________________________________________________________________________________________
+
+:) RUNNING PCA ON A CLEANED VERSION OF DATASET 
+
+Did this on cleaned as PCA does not work when there are NA parts in the dataset.
+
+```{r running pca on cleaned}
+env_vars_numeric <- env_vars_cont[, sapply(env_vars_cont, is.numeric)]
+
+variances <- apply(env_vars_numeric, 2, function(x) {
+  if (all(is.na(x))) {
+    return(NA)  
+  } else {
+    return(sd(x, na.rm = TRUE))
+  }
+})
+
+valid_cols <- !is.na(variances) & (variances != 0)
+
+env_vars_filtered <- env_vars_numeric[, valid_cols]
+
+anyNA(env_vars_filtered)
+any(is.infinite(as.matrix(env_vars_filtered)))
+
+#remove rows with any NA value
+env_vars_clean <- env_vars_filtered[complete.cases(env_vars_filtered), ]
+pca_result_sc = prcomp(env_vars_clean, scale=TRUE)
+
+summary(pca_result_sc)
+```
+
+Plotting the result of principal components vs stdeviations
+```{r}
+par(mfrow=c(1,1))
+plot(pca_result_sc)
+```
+_____________________________________________________________________________________________________
+_____________________________________________________________________________________________________
+
+:) decide on how many components to keep using cumulative PVE
+
+here plot stops changing alot after 4th component
+```{r}
+prop_var_expl_sc = summary(pca_result_sc)$importance[2,]
+cumul_prop_var_expl_sc = summary(pca_result_sc)$importance[3,]
+
+par(mfrow=c(2,2))
+plot(prop_var_expl_sc, type="b", xlab="Component number (sc.)",
+ylab="Proportion variance explained", ylim=c(0,1) )
+plot(cumul_prop_var_expl_sc, type="b", xlab="Number of components (sc.)",
+ylab="Cumulative prop. var. expl.", ylim=c(0,1) )
+```
+_____________________________________________________________________________________________________
+
+_____________________________________________________________________________________________________
+:) calculating second order difference ratio to help detect elbow point
+```{r}
+cumul_prop_var_expl <- cumul_prop_var_expl_sc
+nElem=length(cumul_prop_var_expl_sc)
+ratios=(cumul_prop_var_expl[2:(nElem-1)]-cumul_prop_var_expl[1:(nElem-2)])/
+(cumul_prop_var_expl[3:nElem]-cumul_prop_var_expl[2:(nElem-1)])
+ratios
+```
+max operator tells where explained variance is sharpest.
+
+according to this the first 34 components must be retained
+```{r}
+nComponents_selected = which.max( ratios ) + 1
+nComponents_selected
+```
+_____________________________________________________________________________________________________
+_____________________________________________________________________________________________________
+:) trying other methods
+```{r}
+exists("parallel", where = "package:psych")
+packageVersion("psych")
+
+```
+
+```{r}
+ev <- eigen(cor(env_vars_clean))
+ap <- fa.parallel(env_vars_clean, fa="pc", n.iter=1000, show.legend=FALSE, main = "Parallel Analysis Scree Plot")
+nS <- nScree(x = ev$values, aparallel = ap$eigen$qevpea)
+plotnScree(nS, main = "")
+```
+
+```{r}
+env_vars_subset <- env_vars_clean[complete.cases(env_vars_clean), ]
+
+ncol(env_vars_subset)  
+```
+velicer's MAP test --> here 4 is the best fit.
+```{r}
+install.packages("nFactors")
+
+library(nFactors)
+vss_result <- VSS(env_vars_clean, n = 51, rotate = "none", fm = "pc")
+plot(vss_result)
+```
+
+
+
+```{r}
+round(pca_result_sc$rotation[,1:2], 3)
+```
+
+```{r}
+round(pca_result_sc$rotation[,1:3], 3)
+
+```
+
+```{r}
+round(pca_result_sc$rotation[,1:4], 3)
+
+```
+_____________________________________________________________________________________________________
+_____________________________________________________________________________________________________
+
+:) biplotting original variables against 2 PCs
+
+The biplot below shows 2 components :
+1. arrows (results from pca_result$rotation)
+2. points (results of pca_result)
+
+Rotation transforms original variables into principal components.
+Rotation is needed in order to tell how much each original variable loads onto each PC.
+And arrow lenghts are determined by this rotation.
+
+Each arrow corresponds to the original variable in our dataset.
+The direction and length of an arrow indicate how strongly that variable contributes to the PCs. 
+
+Longer arrows means that the variable is well represented by the first 2 PCs and has a strong influence.Short arrows mean that the variable is weakly represented and less imp in these 2 components. 
+
+The angle between the arrows represents the correlation between variabels. 
+Small angles means that the variables are +vely correlated.
+angles around 90 means that the variables are uncorrelated.
+angles close to 180 mean that they are -vely correlated.
+
+```{r}
+pca_result <- prcomp(env_vars_clean, center = TRUE, scale. = TRUE) 
+
+graphics.off()
+
+dev.new(width=100, height=100, unit="in", noRStudioGD=TRUE)
+
+fviz_pca_biplot(pca_result, repel = TRUE, arrowsize=1.5,col.var="#A2E6FF",xlim=c(-5,5),ylim=c(-5,5),
+       cex=1.2,           
+       expand=3)
+
+summary(pca_result)
+```
+_____________________________________________________________________________________________________
+_____________________________________________________________________________________________________
+
+:) rotate all 9 components using oblimin
+
+```{r}
+install.packages("psych")
+library(psych)
+
+ 
+unrot9 = round(pca_result_sc$rotation[,1:4], 3)
+oblimin9 <- fa(env_vars_clean, nfactors=4, rotate="oblimin")
+oblimin9
+```
+h2 represents communality, u2 represents uniqueness and com represents complexity.
+lets take a row: ndyprmpm10  -0.24	0.77	0.21	-0.08	0.8481608	0.15183922	1.366687
+
+strong loading on MR2, low loadings on other factors. so its not complex
+the h2 is 0.8481608, the u2 is 0.15183922 and com is 1.366687.
+85% of the variance of ndyprmpm10 is explained by the 4 factors.
+15% is unexplained.
+complexity is 1.4 mostly loads on 1 factor so has very clean strucutre.
+
+Our loadings matrix shows that many varibale have weak or scattered contributions across components.
+
+Many variables e.g ndyprmpm10, ndyprmpm2_5, ndyprmno2, ndyprmo3, ndyprm, ndyprypm10, ndyprypm2_5, ndypryno2, ndypryo3, ndypry, 
+tmpdca, tmpdcmx, tmpdcmn, tmpdcaw, tmpdcam, tmpdcay, tmpdcacm, tmpdcamb, tmp95pacmb, tmpanocm, pacctaw, pacctam, pacctay, pacctcm, pacctmb, paccdcm, iwg10mxam, iwg10mxa3m, iwg10mxay, iwg10mxamb load heavily on one PC. This means that these variables are captured by a single underlying latent factor. These variables should be retained, not removed.
+
+You should consider removing those varibales that have low commonalities, high complexity and cross loadings.
+
+cross loadings (those that load moderately on multiple PCs) --> ndypryo3, ndyprm, tmpdcay, tmpdca3m, iwg10mx, iwg10mxam, iwg10mxay, iwg10mxamb. 
+
+low communalities (h2) --> only a small portion of a variable is explained by these 
+common (underlying) factors. here it is ndyprmo3, tmpdca3m, tmpanod, tmpanocm, paccta, pacctaw, iwg10mx, iwg10mxaw, iwg10mxay.
+
+high complexities (com) -->ndypryo3, ndyprmpm2_5, ndyprm, tmpdca3m, paccta3m, iwg10mx, iwg10mxaw, iwg10mxay, iwg10mxamb. 
+
+thus we need to remove:ndyprmpm2_5, ndyprm, paccta3m,iwg10mxaw, ndyprmo3, tmpdca3m, tmpanod, tmpanocm, paccta, pacctaw, iwg10mx, ndypryo3, tmpdcay, iwg10mxam, iwg10mxay, iwg10mxamb
+
+
+_____________________________________________________________________________________________________
+_____________________________________________________________________________________________________
+:) dropping useless variables and replotting biplot
+
+```{r}
+vars_to_drop <- c(
+  "ndyprmpm2_5", "ndyprm", "paccta3m", "iwg10mxaw", "ndyprmo3",
+  "tmpdca3m", "tmpanod", "tmpanocm", "paccta", "pacctaw",
+  "iwg10mx", "ndypryo3", "tmpdcay", "iwg10mxam", "iwg10mxay", "iwg10mxamb"
+)
+
+env_vars_clean <- env_vars_clean[, !(colnames(env_vars_clean) %in% vars_to_drop)]
+
+pca_result2 <- prcomp(env_vars_clean, center = TRUE, scale. = TRUE)
+
+library(factoextra)
+fviz_pca_biplot(
+  pca_result2, 
+  repel = TRUE, 
+  arrowsize = 1.5,
+  col.var = "#A2E6FF",  
+  xlim = c(-5, 5),      
+  ylim = c(-5, 5),
+  cex = 1.2,            
+  expand = 3            
+)
+
+summary(pca_result2)
+```
+
+Dim 1(41%)--> This explains around 41% of total variance in our data. 
+Dim 2(24.8%)--> This explains around 24.8% of total variance.
+
+Together they only contribute to 65.8% of the variance.  
+_____________________________________________________________________________________________________
+_____________________________________________________________________________________________________
+:) doing PCA on cleaned dataset with only some kept env variables and 4 components.
+
+```{r}
+library(FactoMineR)
+PCAres <- PCA(env_vars_clean, scale.unit = TRUE, graph = FALSE, ncp=4)
+
+var <- PCAres$var
+contrib <- var$contrib
+low_contrib_vars <- rownames(contrib)[rowMeans(contrib[, 1:2]) < 5]  # e.g., <5% contribution
+small_arrows <- contrib[low_contrib_vars, ]
+print(small_arrows)
+```
+
+printing eigenvalues
+```{r}
+eig_values <- PCAres$eig
+print(eig_values[1:4, ])
+```
+```{r}
+library(FactoMineR)
+
+eig_values <- PCAres$eig
+colnames(eig_values) <- c("Eigenvalue", "PercentVar", "CumulativeVar")
+eig_values_4 <- eig_values[1:4, ]
+gains <- c(eig_values_4[1, "PercentVar"], diff(eig_values_4[, "PercentVar"]))
+eig_values_with_gain <- cbind(eig_values_4, Gain = gains)
+print(round(eig_values_with_gain, 2))
+
+```
+
+
+
+```{r}
+PCAres <- PCA(env_vars_clean, ncp = 4, graph = FALSE)
+var_contrib <- PCAres$var$contrib[, 1:4]
+total_contrib <- rowSums(PCAres$var$contrib[, 1:4])
+print(round(total_contrib, 2))
+
+```
+______________________________________________________________________________________________________
+______________________________________________________________________________________________________
+:) SCREE PLOT/ ELBOW PLOT FOR CONTRIBUTIONS 
+
+```{r}
+contribs <- c(
+  ndyprmpm10 = 17.67,
+  ndyprmno2 = 15.95,
+  ndyprypm10 = 17.08,
+  ndyprypm2_5 = 21.40,
+  ndypryno2 = 16.19,
+  ndypry = 19.37,
+  tmpdca = 12.51,
+  tmpdcmx = 12.77,
+  tmpdcmn = 11.18,
+  tmpdcaw = 12.58,
+  tmpdcam = 11.87,
+  tmpdcacm = 12.68,
+  tmpdcamb = 12.68,
+  tmp95pacmb = 12.26,
+  pacctam = 29.78,
+  pacctay = 42.41,
+  pacctcm = 37.40,
+  pacctmb = 24.98,
+  paccdcm = 36.06,
+  iwg10mxa3m = 23.19
+)
+
+sorted_contribs <- sort(contribs, decreasing = TRUE)
+
+plot(sorted_contribs, type = "b", pch = 19, col = "blue",
+     xlab = "Variables (sorted)",
+     ylab = "Contribution (%)",
+     main = "Variable Contributions in Descending Order",
+     xaxt = "n")
+
+axis(1, at = 1:length(sorted_contribs), labels = names(sorted_contribs), las = 2, cex.axis = 0.7)
+
+grid()
+
+```
+______________________________________________________________________________________________________
+______________________________________________________________________________________________________
+:) FINAL CONCLUSION for CONTINUOUS portion of dataset
+
+Here the analysis is telling us that we still have low contributing variables of "tmpdcmx", "tmpdcamb", "tmpdcaw", "tmpdca", "tmp95pacmb", "tmpdcam", "tmpdcmn" that we can remove. I know that I said earlier that some these load heavily on only one PC and are useful for our analysis but from the scree plot and overall contribution patterns it is clear that the impact on total dataset variance is limited.
+
+Thus all variables to remove from the continuous portion of the dataset becomes:ndyprmpm2_5, ndyprm, paccta3m,iwg10mxaw, ndyprmo3, tmpdca3m, tmpanod, tmpanocm, paccta, pacctaw, iwg10mx, ndypryo3, tmpdcay, iwg10mxam, iwg10mxay, iwg10mxamb
+______________________________________________________________________________________________________
+
+# THIS IS WHERE THE ENTIRE PORTION FOR CONTINUOUS VARIABLE ANALYSIS ENDS
+
+# THIS IS THE ENTIRE PORTION FOR ORDINAL VARIABLE ANALYSIS
+
+```{r}
+vars_to_remove_2 <- c(
+  "ndyprmpm10", "ndyprmpm2_5", "ndyprmno2", "ndyprmo3", "ndyprm", "ndyprypm10",
+  "ndyprypm2_5", "ndypryno2", "ndypryo3", "ndypry", "tmpdca", "tmpdcmx",
+  "tmpdcmn", "tmpdcaw", "tmpdcam", "tmpdca3m", "tmpdcay", "tmpdcacm", "tmpdcamb",
+  "tmp95pacmb", "tmpanod", "tmpanocm", "paccta", "pacctaw", "pacctam", "paccta3m",
+  "pacctay", "pacctcm", "pacctmb", "paccdcm", "iwg10mx", "iwg10mxam", "iwg10mxaw",
+  "iwg10mxa3m", "iwg10mxay", "iwg10mxamb"
+)
+
+env_vars_ord <- env_vars[ , !(names(env_vars) %in% vars_to_remove_2)]
+
+str(env_vars_ord)
+
+```
+```{r}
+variances <- apply(env_vars_ord, 2, sd)
+print(variances)
+```
+```{r}
+install.packages("polycor")
+
+library(polycor)
+
+```
+
+```{r}
+ordinal_var_names <- c(
+  "aqiwdpm10", "aqiwdpm2_5", "aqiwdso2", "aqiwdno2", "aqiwdo3", "aqiwd",
+  "aqiw2dpm10", "aqiw2dpm2_5", "aqiw2dso2", "aqiw2dno2", "aqiw2do3", "aqiw2d",
+  "ndyprwpm10", "ndyprwpm2_5", "ndyprwso2", "ndyprwno2", "ndyprwo3", "ndyprw",
+  "ndyprmso2", "ndypryso2"
+)
+
+env_ordinal <- env_vars[, colnames(env_vars) %in% ordinal_var_names]
+env_ordinal[] <- lapply(env_ordinal, function(x) {
+  if (!is.ordered(x)) ordered(x) else x
+})
+
+#filter out variables with only one unique value
+valid_cols <- sapply(env_ordinal, function(x) length(unique(na.omit(x))) > 1)
+env_ordinal_filtered <- env_ordinal[, valid_cols]
+
+#filter out variables with near zero variance
+nzv <- sapply(env_ordinal_filtered, function(x) sd(as.numeric(x), na.rm = TRUE) < 1e-6)
+env_ordinal_filtered <- env_ordinal_filtered[, !nzv]
+
+env_ordinal_clean <- env_ordinal_filtered[complete.cases(env_ordinal_filtered), ]
+
+hetcor_result <- hetcor(env_ordinal_clean)
+poly_corr <- hetcor_result$correlations
+
+bad_cells <- which(!is.finite(poly_corr), arr.ind = TRUE)
+bad_vars <- colnames(poly_corr)[unique(c(bad_cells[,1], bad_cells[,2]))]
+env_ordinal_clean_fixed <- env_ordinal_clean[, !colnames(env_ordinal_clean) %in% bad_vars]
+
+hetcor_result <- hetcor(env_ordinal_clean_fixed)
+poly_corr <- hetcor_result$correlations
+
+stopifnot(all(is.finite(poly_corr)))
+
+
+fa.parallel(poly_corr, n.obs = nrow(env_ordinal_clean), fa = "pc", fm = "pa")
+
+ordinal_pca <- principal(poly_corr, nfactors = 2, rotate = "none")
+
+print(ordinal_pca)
+
+```
+
+```{r}
+library(ggplot2)
+
+# Convert loadings to a data frame
+loadings_df <- as.data.frame(ordinal_pca$loadings[, 1:2])
+loadings_df$varname <- rownames(loadings_df)
+
+ggplot(loadings_df, aes(x = PC1, y = PC2, label = varname)) +
+  geom_segment(aes(x = 0, y = 0, xend = PC1, yend = PC2),
+               arrow = arrow(length = unit(0.2, "cm")), color = "#A2E6FF") +
+  geom_text(repel = TRUE, size = 4) +
+  xlim(c(-1, 1)) + ylim(c(-1, 1)) +
+  theme_minimal() +
+  labs(title = "Custom Biplot of Ordinal Variables (Polychoric PCA)",
+       x = "PC1", y = "PC2")
+
+```
+
+
+rotate all 2 components using oblimin
+
+```{r}
+install.packages("psych")
+library(psych)
+
+oblimin9 <- fa(poly_corr, nfactors=2, rotate="oblimin", fm="pa")
+oblimin9
+```
+
+h2 represents communality, u2 represents uniqueness and com represents complexity.
+
+Many variables e.g aqiw2dpm2_5,ndyprwpm10, ndyprwpm2_5, ndyprwno2, ndyprw  load heavily on one PC. This means that these variables are captured by a single underlying latent factor. These variables should be retained, not removed.
+
+You should consider removing those varibales that have low commonalities, high complexity and cross loadings.
+
+cross loadings (those that load moderately on multiple PCs) --> none
+
+low communalities (h2) --> only a small portion of a variable is explained by these 
+common (underlying) factors. none here.
+
+high complexities (com) -->none here.
+
+thus we need to remove:dont remove anything from ordinal side
+
+
+REPLOT THE ORGINAL PLOT with this information 
+
+data2 <--- data
+data2<- delete ndyprmpm2_5, ndyprm, paccta3m,iwg10mxaw, ndyprmo3, tmpdca3m, tmpanod, tmpanocm, paccta, pacctaw, iwg10mx, ndypryo3, tmpdcay, iwg10mxam, iwg10mxay, iwg10mxamb
+
+plot pca of original data2 with these variables removed
+
+```{r}
+data2 <- data
+
+vars_to_remove <- c(
+  "ndyprmpm2_5", "ndyprm", "paccta3m", "iwg10mxaw", "ndyprmo3", 
+  "tmpdca3m", "tmpanod", "tmpanocm", "paccta", "pacctaw", 
+  "iwg10mx", "ndypryo3", "tmpdcay", "iwg10mxam", "iwg10mxay", "iwg10mxamb"
+)
+
+data2_clean <- data2[, !(colnames(data2) %in% vars_to_remove)]
+
+num_vars <- sapply(data2_clean, is.numeric)
+data2_numeric <- data2_clean[, num_vars]
+
+data2_numeric_complete <- na.omit(data2_numeric)
+
+pca_result <- prcomp(data2_numeric_complete, center = TRUE, scale. = TRUE)
+
+fviz_pca_biplot(pca_result,
+                repel = TRUE,
+                arrowsize = 1.5,
+                col.var = "#FF7F7F",
+                cex = 1.2,
+                xlim = c(-5, 5),
+                ylim = c(-5, 5),
+                geom.ind="none",
+                title = "PCA Biplot of data (after variable removal)")
+```
+
+```{r}
+library(psych)
+vss_result <- VSS(data2_numeric_complete, rotate = "none", fm = "pc")
+plot(vss_result)
+```
+
+LOADINGS with all PCs found on the entire dataset 
+
+
+Even though I have dropped weak or problematic variables after running a PCA and selected an optimal number of components on the original dataset it is better to return to the full loading matrix. It ensures:
+
+- I preserve a complete mapping from original variables to selected components.
+- I  can later project any future or external data in the same feature space without re-training or re-rotating.
+- I  keep the same coordinate system (orthogonal PC axes) established by the initial PCA.
+
+```{r}
+loadings_all_optimal <- pca_result_sc$rotation[, 1:nComponents_selected]
+round(loadings_all_optimal, 3)
+```
+
