@@ -1,0 +1,662 @@
+---
+title: "Group Assignment"
+author: "Mila MADIOT s4423283"
+date: "2025-05-27"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+# Data Cleaning and Uploading
+
+```{r}
+df = read.csv("merged-EOSC-ESS8e02_2.csv")
+head(df)
+```
+
+```{r}
+table(df$name)
+table(df$essround)
+table(df$edition)
+table(df$proddate)
+table(df$cntry)
+```
+
+```{r}
+varkeep = c("cntry","cntbrthc","idno","gndr","region","polintr","pstplonl","bctprd","lrscale","trstep","trstlgl","trstplc","trstplt","trstprl","trstprt","trstun","bnlwinc","imsclbn","sbstrec","sbprvpv","sbeqsoc","sbbsntx","sblazy","sblwcoa","dfincac","smdfslv","gincdif","psppsgva","psppipla","eneffap","rdcenr","cflsenr","elgcoal","elgngas","elghydr","elgnuc","elgsun","elgwind","elgbio","wrpwrct","wrenexp","wrdpimp","wrdpfos","wrntdis","wrinspw","wrtcfl","wrtratc","clmchng","clmthgt1","clmthgt2","ccnthum","ccrdprs","wrclmch","ccgdbd","lkredcc","lklmten","gvsrdcc","ownrdcc","inctxff","sbsrnen","banhhap")
+
+lastvar = c("idno","region","aqiwdpm10","iwg10mxamb")
+```
+
+```{r}
+env = which(colnames(df) %in% lastvar)
+env
+soc = which(colnames(df) %in% varkeep)
+soc
+```
+
+```{r}
+which(colnames(df) == "lrscale")
+which(colnames(df) == "region")
+```
+
+
+```{r}
+length(varkeep)
+length(soc)
+```
+```{r}
+envdf = df[,c(5,89,501,537:592)]
+socdf = df[,soc]
+head(socdf)
+head(envdf) 
+```
+
+
+```{r}
+table(df$region)
+```
+
+```{r}
+head(df[df$region == "AT13", env])
+```
+We can see that the values per region vary, which means that the data has been collected several times for each region, and associated with the individual each time.
+
+
+```{r}
+apply(envdf, 2,function(x) sum(is.na(x)))
+```
+A few variables have missing data : aqiwdpm2_5, aqiwdso2, aqiwdpm2_5, aqiw2dso2. (almost same amount of missing values : 280-283 out of 2582). We should investigate the missing data, as it seems to be missing for the same persons over the variables.
+
+
+```{r}
+apply(socdf,2, function(x) sum(is.na(x)))
+```
+
+
+# Description plots
+
+## lrscale
+
+```{r}
+hist(df$lrscale, col="lavender", xlim=c(0,13), breaks=10, xlab="Placement on left right scale", main="Histogram of the political scale frequencies ", probability=TRUE)
+```
+
+There seems to be less people from the far right than the far left.
+The missing values have been categorized in three possibilities, which can help understand it.
+
+```{r}
+table(df$lrscale)
+summary(df$lrscale)
+```
+The variable takes 14 values, including 3 that are considered as missing values.
+
+To simplify the plots and still include the missing data, let's recode the missing values as 11, 12 and 13.
+
+```{r}
+df$lrscale[df$lrscale==77] = 11
+df$lrscale[df$lrscale==88] = 12
+df$lrscale[df$lrscale==99] = 13
+```
+
+```{r}
+table(df$lrscale)
+```
+
+
+
+```{r}
+boxplot(tmpanocm~lrscale, data=df, xlim=c(0,14))
+boxplot(paccdcm~lrscale, data=df, xlim=c(0,14))
+boxplot(iwg10mxam ~lrscale, data=df, xlim=c(0,14))
+boxplot(tmpanod ~lrscale, data=df, xlim=c(0,14))
+```
+
+```{r}
+table(envdf$region)
+table(envdf$lrscale)
+tab = as.matrix(table(envdf$lrscale, envdf$region))
+```
+
+
+```{r}
+mosaicplot(tab, main="Sex and diabetes", col="purple")
+```
+This is not very clear -> too many categories.
+
+
+## env data
+
+```{r}
+summary(envdf)
+```
+
+
+```{r}
+datPM = envdf$aqiwdpm10 + envdf$aqiwdpm2_5
+datepoll = envdf$aqiwdso2 + envdf$aqiwdno2 + envdf$aqiwdo3 +envdf$aqiwd
+days2poll = envdf$aqiw2dpm10 + envdf$aqiw2dpm2_5 + envdf$aqiw2dso2 + envdf$aqiw2dno2 + envdf$aqiw2do3 + envdf$aqiw2d
+```
+
+```{r}
+hist(datPM)
+hist(datepoll)
+hist(days2poll) 
+```
+
+```{r}
+hist(envdf$tmp95pacmb)
+```
+
+
+
+# Analysis to prefer
+
+### Number of variables :
+
+61 variables to describe people's opinion on politics, 58 variables on environment, including two that are already in the first dataset (idno and region).=> lots of variables : could be useful to do a PCA as the variables are correlated, or a selection of variables with ridge (lasso would not perform well here).
+
+SO even though the number of variables is high, it is still smaller than n.
+
+## Variance-bias trade-off :
+
+Many observations (2582), but representing a very wide population (European population in largely urban areas, near capitals).
+
+### Response variable :
+
+The problem is that our response variable is in fact several variables right now. We should find a way to summarize the information we have into one variable (response variable).
+Or choose only one variable. In this case, the best one is probably lrscale (on left-right scale ).
+
+### Type of variable :
+
+We have mostly ordered variables (scale from 1 to 5), and a few categorical variables (country, region). Some stat learning techniques do not perform well with ordered variables. Linear/logistic regression should be avoided. Regarding the 
+
+### Goal :
+
+We want to be able to analyze the relationship between the variables, to interpret it rather than to predict.
+
+## Methods :
+
+We could do one PCA with linear regression and compare the efficiency with another method that is good for inference and doesn't assume linearity (mse comparing). We would need another way to select the variables then (best subset selection, or simply applying a ridge or lasso (but lasso bad with correlated data)).
+
+# PCR
+
+## Least-Square Regression
+
+Does it have to be linear ? Apprently yes. p.267 ISLR
+
+To keep in mind :
+ As more principal components are used in the regression model, the bias decreases, but the variance increases.
+ PCR will tend to do well in cases when the first few principal components are sufficient to capture most of the variation in the predictors as well as the relationship with the response.
+ While the supervised dimension reduction of PLS can reduce bias, it also has the potential to increase variance, so that the overall benefit of PLS relative to PCR is a wash
+ 
+Let's follow the steps in the ISLR book 
+```{r}
+library(pls)
+set.seed(4423283)
+```
+
+```{r}
+head(envdf)
+```
+
+Problem with missing data :
+We need to delete them. Especially for the outcome variable.
+
+### Cleaning data
+
+#### Missing data
+```{r}
+apply(envdf, 2,function(x) sum(is.na(x)))
+```
+aqiw2dpm2_5, aqiw2dso2, aqiwdpm2_5, aqiwdso2 have missing data. 
+```{r}
+table(which(is.na(envdf$aqiw2dpm2_5))== which(is.na(envdf$aqiwdpm2_5)))
+table(which(is.na(envdf$aqiwdso2))== which(is.na(envdf$aqiw2dso2)))
+```
+aqiwdpm2_5 and aqiw2dpm2_5 have the same missing values. Same for aqiw2dso2 and aqiwdso2.
+
+```{r}
+table(envdf$aqiw2dpm2_5)
+table(envdf$aqiwdpm2_5)
+table(envdf$aqiw2dso2)
+table(envdf$aqiwdso2)
+```
+We can delete aqiw2dso2 and aqiwdso2, and the rows concerned by missing data for 2_5 variables.
+
+```{r}
+envdf_clean = envdf
+envdf_clean$aqiw2dso2 = NULL
+envdf_clean$aqiwdso2 = NULL
+envdf_clean = envdf_clean[-which(is.na(envdf$aqiw2dpm2_5)),]
+```
+
+
+
+Let's set 77, 88 and 99 to NA in lrscale :
+```{r}
+envdf_clean$lrscale[envdf_clean$lrscale == 77]= NA
+envdf_clean$lrscale[envdf_clean$lrscale == 88]= NA
+envdf_clean$lrscale[envdf_clean$lrscale == 99]= NA
+table(envdf_clean$lrscale)
+sum(is.na(envdf_clean$lrscale))
+```
+We should have a 144 missing values.
+
+Let's clean the dataset according to those :
+```{r}
+envdf_clean= envdf_clean[-which(is.na(envdf_clean$lrscale)),]
+ncol(envdf_clean)
+length(envdf_clean$lrscale)
+```
+
+
+```{r}
+apply(envdf_clean, 2,function(x) sum(is.na(x)))
+```
+This seems clean.
+
+```{r}
+str(envdf_clean)
+```
+Maybe the problem comes from region which is character. We will exclude it from the analysis.
+
+#### Checking variables with only one value 
+
+```{r}
+sapply(envdf, function(x) length(unique(x)) == 1)
+```
+ndyprwso2,ndypryso2,ndyprmso2 only have one value.
+```{r}
+table(envdf$ndyprwso2)
+table(envdf$ndypryso2)
+table(envdf$ndyprmso2)
+```
+Okay so let's delete : ndypryso2,ndyprmso2 and ndyprwso2.
+
+```{r}
+envdf_clean$ndyprmso2= NULL
+envdf_clean$ndypryso2 = NULL
+envdf_clean$ndyprwso2 = NULL
+```
+
+```{r}
+head(envdf_clean)
+```
+
+
+```{r}
+pcr.fit = pcr(lrscale~., data = envdf_clean[,-c(1,3)],scale=TRUE, validation="CV") # we take out the idea variable, but let's keep the region one
+```
+I finally got it to work, with scale=TRUE !!
+With  this code the variables are scaled to have the same variance, and a 10-fold cross validation is computed. Let's note that here the variables are not treated differently whether they are ordinal or numerical.
+
+
+```{r}
+summary(pcr.fit)
+```
+
+```{r}
+validationplot(pcr.fit, val.type = "MSEP")
+```
+
+The Root mean squared error stays approximately the same over the number of components, but reaches a minimum around 28 components (between 20 and 30 at least.)
+
+```{r}
+pcr.fit
+```
+
+Maybe we should divide the dataset into a training and test datasets :
+
+```{r}
+length(envdf_clean$idno)*0.8
+```
+
+
+```{r}
+set.seed(4423283)
+train_size = 1724
+train_ind = sample(seq_len(nrow(envdf_clean)),
+    size = train_size
+  )
+train_set = envdf_clean[train_ind, ]
+test_set = envdf_clean[-train_ind, ]
+```
+
+
+```{r}
+pcr.fit2 = pcr(lrscale~.-1, data = train_set,scale=TRUE, validation="CV") # using region too
+summary(pcr.fit2)
+```
+
+```{r}
+validationplot(pcr.fit2, val.type = "MSEP")
+```
+Interesting enough, using region we then get a clear number of components needed. We need 13 components.
+
+We could try one pcr with 30  variables (lower RMSE) and 98.9% of variance explained, and one with 3 PC, with 57.37% variance explained.
+```{r}
+pcr.pred <- predict(pcr.fit, data=test_set[,-3], ncomp = 3)
+ mean((pcr.pred - test_set$lrscale)^2)
+```
+
+```{r}
+pcr.pred <- predict(pcr.fit2, data=test_set, ncomp = 13)
+mean((pcr.pred - test_set$lrscale)^2)
+```
+
+## PCA by Fizza
+
+```{r}
+vars_to_remove <- c(
+  "aqiwdpm10", "aqiwdpm2_5", "aqiwdno2", "aqiwdo3", "aqiwd",
+  "aqiw2dpm10", "aqiw2dpm2_5", "aqiw2dno2", "aqiw2do3", "aqiw2d",
+  "ndyprwpm10", "ndyprwpm2_5", "ndyprwso2", "ndyprwno2", "ndyprwo3", "ndyprw",
+  "ndyprmso2", "ndypryso2"
+)
+
+envdf_cleancont = envdf_clean[ , !(names(envdf_clean) %in% vars_to_remove)]
+envdf_cleancont = envdf_cleancont[,-c(1:3)]
+head(envdf_cleancont)
+```
+
+
+```{r}
+pca_result_sc = prcomp(envdf_cleancont, scale=TRUE)
+summary(pca_result_sc)
+```
+
+
+```{r}
+par(mfrow=c(1,1))
+plot(pca_result_sc)
+```
+
+
+```{r}
+library(nFactors)
+ev = eigen(cor(envdf_cleancont))
+ap = parallel(subject=nrow(envdf_cleancont), var=ncol(envdf_cleancont), rep=1000)
+nS = nScree(x=ev$values, aparallel=ap$eigen$qevpea)
+plotnScree(nS, main="")
+```
+
+
+```{r}
+library(EFA.dimensions)
+# Velicer's Map
+MAP(envdf_cleancont, corkind='pearson', verbose=TRUE)
+```
+Here again we have 8.
+
+```{r}
+cumul_prop_var_expl = summary(pca_result_sc)$importance[3,]
+nElem=length(cumul_prop_var_expl)
+ratios=(cumul_prop_var_expl[2:(nElem-1)]-cumul_prop_var_expl[1:(nElem-2)])/
+(cumul_prop_var_expl[3:nElem]-cumul_prop_var_expl[2:(nElem-1)])
+ratios
+nComponents_selected = which.max( ratios ) + 1
+nComponents_selected
+```
+Here it doesn't work obviously.
+
+Let's set the proportion of variance explained that we want at 90% and take 10 PC, knowing we will have less variance explained in the end as we rotate.
+
+```{r}
+library(GPArotation)
+ob = oblimin(pca_result_sc$rotation[,c(1:20)])
+```
+
+```{r}
+ob$loadings[which(abs(ob$loadings[,1]) > 0.3),1]
+```
+
+I actually don't know where to find the values.
+```{r}
+scores = pca_result_sc$x %*% ob$loadings
+scores
+```
+```{r}
+length(pca_result_sc$x[,1]) # same length 
+```
+
+
+
+## Other analysis to compare it with (classification):
+
+- Multinomial logistic regression ? Interpretation possible, but regarding the baseline chosen (reference group in dependent variable)
+-GLM (with appropriate link function like logit or probit)
+-QDA -> plus flexible, biais plus faible mais variance plus élevée car prend en compte des relations non-linéaires. Doesn't matter with the size of our dataset, the variance can stay low. The model can adapt itself enough to the real relationship thanks to the large sample size, and it's easier to reduce the variance than the bias. Also, QDA is assuming that the observations
+from each class are drawn from a Gaussian distribution and that each class has its own
+covariance matrix. (could be seen with boxplots). QDA better than KNN to deal with larger nb of features + easier to interpret.
+
+### Correlation :
+```{r}
+library(corrplot)
+cor.mat = cor(envdf_clean[,-c(1,3, 26:54)])
+corrplot(cor.mat)
+```
+
+```{r}
+library(corrplot)
+cor.mat = cor(envdf_clean[,-c(1,3:26)])
+corrplot(cor.mat)
+```
+Obviously many variables are correlated with each other.
+
+# QDA
+
+## Some testing (you don't have to look at it)
+
+We take the same split as done before for PCR (done on clean data set, so there should be only values between 0 and 10 for lrscale).
+
+```{r}
+head(test_set)
+head(train_set)
+table(train_set$lrscale)
+```
+Few observations for 9 and 1. This is too small for QDA. We can group 0 and 1 together, and 9 and 10 together.
+```{r}
+train_set[train_set$lrscale== 0,]$lrscale = 1
+train_set[train_set$lrscale== 10,]$lrscale = 9
+table(train_set$lrscale)
+```
+```{r}
+as.factor(train_set$lrscale)
+```
+
+```{r}
+table(train_set$region)
+```
+
+
+```{r}
+#library(MASS)
+#qda.fit = qda(as.factor(lrscale)~., data=train_set[,-c(1,3)])
+#qda.fit
+```
+This doesn't work : collinearity probably.
+
+```{r}
+apply(train_set, 2, function(x) any(is.na(x)))
+```
+
+I am having a problem so let's do our own pca based on the variables.
+Let's add up some variables together into new ones so that it becomes continuous.
+
+```{r}
+str(envdf_clean)
+```
+
+The ndy variables are number of days => not a scale. The aqiw ones are scales. We can sum them up based on the day to have an idea of the air quality per day instead of per component.
+Those are the only ordinal variables.
+
+```{r}
+train_set$aqiw2 = train_set$aqiw2d + train_set$aqiw2dno2 + train_set$aqiw2dpm10 + train_set$aqiw2dpm2_5 + train_set$aqiw2do3 # five instead of 6 in the codebook because the last one was taking only one value
+train_set$aqiw = train_set$aqiwd + train_set$aqiwdno2 + train_set$aqiwdpm10 + train_set$aqiwdpm2_5 + train_set$aqiwdo3
+
+# Then we can set the initial ones to 0
+
+train_set = train_set[,-c(4:13)]
+head(train_set)
+```
+
+Same for the test set :
+```{r}
+test_set$aqiw2 = test_set$aqiw2d + test_set$aqiw2dno2 + test_set$aqiw2dpm10 + test_set$aqiw2dpm2_5 + test_set$aqiw2do3 # five instead of 6 in the codebook because the last one was taking only one value
+test_set$aqiw = test_set$aqiwd + test_set$aqiwdno2 + test_set$aqiwdpm10 + test_set$aqiwdpm2_5 + test_set$aqiwdo3
+
+# Then we can set the initial ones to 0
+
+test_set = test_set[,-c(4:13)]
+head(test_set)
+```
+
+Let's try to run again the qda already, otherwise we will do PCA now, considering the variables as continuous.
+
+```{r}
+library(MASS)
+qda.fit = lda(as.factor(lrscale)~., data=train_set[,-1])
+qda.fit
+```
+
+Toujours pas. Mais ça marche avec lda, avec un avis disant que les variables sont collinéaires
+
+## End of testing
+
+
+## Let's apply PCA (over all the dataset):
+
+```{r}
+envdf_clean$aqiw2 = envdf_clean$aqiw2d + envdf_clean$aqiw2dno2 + envdf_clean$aqiw2dpm10 + envdf_clean$aqiw2dpm2_5 + envdf_clean$aqiw2do3 # five instead of 6 in the codebook because the last one was taking only one value
+envdf_clean$aqiw = envdf_clean$aqiwd + envdf_clean$aqiwdno2 + envdf_clean$aqiwdpm10 + envdf_clean$aqiwdpm2_5 + envdf_clean$aqiwdo3
+
+# Then we can set the initial ones to 0
+
+envdf_clean = envdf_clean[,-c(4:13)]
+head(envdf_clean)
+```
+
+
+```{r}
+pr.out = prcomp(envdf_clean[,-c(1:3)], scale = TRUE) # no scaling because the variables are already scaled
+pr.out
+```
+
+```{r}
+summary(pr.out)
+```
+
+### Cumulative PVE
+
+```{r}
+cumul_prop_var_expl = summary(pr.out)$importance[3,]
+plot(cumul_prop_var_expl~c(1:43), type="b", ylab="Cumulative PVE", xlab="Number of Principal Component", pch=16, main="Cumulative explained variance")
+abline(h=0.9, col="red")
+```
+Looks like we get what we want at 11.
+```{r}
+cumul_prop_var_expl
+```
+
+
+### Ratios 
+
+```{r}
+cumul_prop_var_expl = summary(pr.out)$importance[3,]
+nElem=length(cumul_prop_var_expl)
+ratios=(cumul_prop_var_expl[2:(nElem-1)]-cumul_prop_var_expl[1:(nElem-2)])/
+(cumul_prop_var_expl[3:nElem]-cumul_prop_var_expl[2:(nElem-1)])
+ratios
+```
+
+```{r}
+nComponents_selected = which.max( ratios[-c(40:41)] ) + 1
+nComponents_selected
+```
+We would select 39 principal components in our analysis. (insane)
+
+### Cattell's scree plot
+
+```{r}
+plot(pr.out, type="l", main="Scree plot of the PCA")
+```
+As Cattell suggests looking at the last significant drop to select the number of components, we could here decide to keep 3 components. After 3 components, the variance do not differ strikingly.
+
+
+### Velicer's MAP
+
+```{r}
+library(EFA.dimensions)
+# Velicer's Map
+MAP(envdf_clean[,-c(1:3)], corkind='pearson', verbose=TRUE)
+```
+According to the Velicer's MAP, 8 components should be kept.
+
+### Horn's parallel analysis
+
+```{r}
+library(nFactors)
+ev = eigen(cor(envdf_clean[,-c(1:3)]))
+ap = parallel(subject=nrow(envdf_clean), var=ncol(envdf_clean)-3, rep=1000)
+nS = nScree(x=ev$values, aparallel=ap$eigen$qevpea)
+plotnScree(nS, main="")
+```
+We would keep 9. So overall, we should keep between 9 and 11 variables.
+Let's keep 13 and rotate :
+
+```{r}
+library(GPArotation)
+ob = oblimin(pr.out$rotation[,c(1:20)])
+ob
+```
+
+
+pr.out$rotation gives 60x20
+pr.out$x gives 2000x20
+to get 2000x60 standardize matrix, we need ...
+ob$loadings is 60x20
+Then to get the values with rotation (2000x20) we need 
+
+```{r}
+data_cent = pr.out$x %*% t(pr.out$rotation)
+pr_x_rot = data_cent %*% ob$loadings
+pr_x_rot
+```
+
+Okay ! So now we want it as a dataframe with region and lrscale.
+
+```{r}
+new_df = as.data.frame(pr_x_rot)
+new_df$region = envdf_clean$region
+new_df$lrscale = envdf_clean$lrscale
+```
+
+```{r}
+head(new_df)
+```
+
+### Let's try first without dividing the dataset into train set and test set
+
+```{r}
+table(new_df$lrscale)
+```
+
+## QDA fit
+
+```{r}
+library(MASS)
+qda.fit = qda(as.factor(lrscale)~., data=new_df[,-21])
+qda.fit
+```
+Okay so apparently the problem was just the variable region, and the collinearity. Now we solved those two problems and we end up with this !
+
+#### Prediction :
+
+That would be a train fit
+```{r}
+qda.class <- predict(qda.fit, new_df)$class
+table(qda.class, new_df$lrscale)
+```
+
+
