@@ -1,0 +1,138 @@
+---
+title: "R Notebook Covariance Matrix"
+output: html_notebook
+---
+
+This is the code provided in the assignment. 
+```{r}
+library(MASS)
+
+gen_data<-function(n) {
+  p<-3
+  n1<-n2<-n/2
+  cov_1<-diag(rep(1,p))+0.2
+  cov_2<-cov_1
+  cov_2[1,2]<-cov_2[2,1]<-cov_2[1,2]+0.5
+  x_class1<-mvrnorm(n1,mu=rep(3,p),Sigma= cov_1)
+  x_class2<-mvrnorm(n2,mu=rep(2,p),Sigma= cov_2)
+  x<-rbind(x_class1, x_class2)
+  y<-rep(c(1,2),c(n1, n2))
+  df<-as.data.frame(cbind(x,y))
+  names(df)<-c(paste0("x",1:p),"y")
+  return(df)
+  }
+```
+
+This is the generation of data portion. 
+```{r}
+train_set_1_50_samples <- gen_data(50)
+train_set_2_10000_samples <- gen_data(10000)
+test_set_1_10000_samples <- gen_data(10000)
+
+train_set_1_50_samples
+train_set_2_10000_samples
+test_set_1_10000_samples
+```
+
+A linear discriminant and quadratic discriminant model is trained using 50 samples
+
+```{r}
+linear_discrimant_model <- lda(y ~ x1 + x2 + x3, data = train_set_1_50_samples)
+quadratic_discriminant_model <- qda(y ~ x1 + x2 + x3, data = train_set_1_50_samples)
+```
+
+LDA and QDA is used to predict classifications of 10000 test samples
+```{r}
+lda_classifications <- predict(linear_discrimant_model, test_set_1_10000_samples)
+lda_classes <- lda_classifications$class
+qda_classifications <- predict(quadratic_discriminant_model,test_set_1_10000_samples)
+qda_classes <- qda_classifications$class
+
+```
+
+The performance is measured by comparing lda and qda classes with actual labels.
+```{r}
+lda_performance = mean(lda_classes == test_set_1_10000_samples[["y"]])
+qda_performance = mean(qda_classes == test_set_1_10000_samples[["y"]])
+```
+
+Accuracy is printed
+```{r}
+cat("LDA performance in terms of accuracy on test set:", lda_performance, "\n")
+cat("QDA performance in terms of accuracy on test set:", qda_performance, "\n")
+```
+
+Linear discriminant and quadratic discriminant are trained using 10000 samples and classes from test set are predicted accordingly. 
+```{r}
+linear_discrimant_model_large <- lda(y ~ x1 + x2 + x3, data = train_set_2_10000_samples)
+quadratic_discriminant_model_large <- qda(y ~ x1 + x2 + x3, data = train_set_2_10000_samples)
+lda_classifications_large <- predict(linear_discrimant_model_large, test_set_1_10000_samples)
+lda_classes_large <- lda_classifications_large$class
+qda_classifications_large <- predict(quadratic_discriminant_model_large,test_set_1_10000_samples)
+qda_classes_large <- qda_classifications_large$class
+lda_performance_large = mean(lda_classes_large == test_set_1_10000_samples[["y"]])
+qda_performance_large = mean(qda_classes_large == test_set_1_10000_samples[["y"]])
+
+cat("LDA performance in terms of accuracy on test set:", lda_performance_large, "\n")
+cat("QDA performance in terms of accuracy on test set:", qda_performance_large, "\n")
+```
+
+The average accuracy is calculated over 100 runs for the large train set. 
+```{r}
+lda_100_accuracies <- numeric(100)
+qda_100_accuracies <- numeric(100)
+
+
+for (i in 1:100) {
+linear_discrimant_model_large <- lda(y ~ x1 + x2 + x3, data = train_set_2_10000_samples)
+quadratic_discriminant_model_large <- qda(y ~ x1 + x2 + x3, data = train_set_2_10000_samples)
+  
+lda_classifications_large <- predict(linear_discrimant_model_large, test_set_1_10000_samples)
+lda_classes_large <- lda_classifications_large$class
+qda_classifications_large <- predict(quadratic_discriminant_model_large, test_set_1_10000_samples)
+  qda_classes_large <- qda_classifications_large$class
+  
+  lda_performance_large = mean(lda_classes_large == test_set_1_10000_samples[["y"]])
+  qda_performance_large = mean(qda_classes_large == test_set_1_10000_samples[["y"]])
+  
+  lda_100_accuracies[i] <- lda_performance_large
+  qda_100_accuracies[i] <- qda_performance_large
+}
+
+average_over_100_lda_accuracy <- mean(lda_100_accuracies)
+average_over_100_qda_accuracy <- mean(qda_100_accuracies)
+
+cat("Average LDA performance in terms of accuracy on test set over 100 runs:", average_over_100_lda_accuracy, "\n")
+cat("Average QDA performance in terms of accuracy on test set over 100 runs:", average_over_100_qda_accuracy, "\n")
+
+```
+The average accuracy is calculated over 100 runs for the small train set. 
+
+```{r}
+lda_100_accuracies_small <- numeric(100)
+qda_100_accuracies_small <- numeric(100)
+
+
+for (i in 1:100) {
+linear_discrimant_model_small <- lda(y ~ x1 + x2 + x3, data = train_set_1_50_samples)
+quadratic_discriminant_model_small <- qda(y ~ x1 + x2 + x3, data = train_set_1_50_samples)
+  
+lda_classifications_small <- predict(linear_discrimant_model_small, test_set_1_10000_samples)
+lda_classes_small <- lda_classifications_small$class
+qda_classifications_small <- predict(quadratic_discriminant_model_small, test_set_1_10000_samples)
+  qda_classes_small <- qda_classifications_small$class
+  
+  lda_performance_small = mean(lda_classes_small == test_set_1_10000_samples[["y"]])
+  qda_performance_small = mean(qda_classes_small == test_set_1_10000_samples[["y"]])
+  
+  lda_100_accuracies_small[i] <- lda_performance_small
+  qda_100_accuracies_small[i] <- qda_performance_small
+}
+
+average_over_100_lda_accuracy_small <- mean(lda_100_accuracies_small)
+average_over_100_qda_accuracy_small <- mean(qda_100_accuracies_small)
+
+cat("Average LDA performance in terms of accuracy on test set over 100 runs:", average_over_100_lda_accuracy_small, "\n")
+cat("Average QDA performance in terms of accuracy on test set over 100 runs:", average_over_100_qda_accuracy_small, "\n")
+```
+
