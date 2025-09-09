@@ -1,0 +1,150 @@
+---
+title: "R Notebook Covariance Matrix"
+output: html_notebook
+---
+
+This is the code provided in the assignment. 
+```{r}
+library(MASS)
+
+gen_data<-function(n) {
+  p<-15
+  n1<-n2<-n/2
+  cov_1<-diag(rep(1,p))+0.2
+  x_class1<-mvrnorm(n1,mu=rep(3,p),Sigma= cov_1)
+  x_class2<-mvrnorm(n2,mu=rep(2,p),Sigma= cov_1)
+  x<-rbind(x_class1, x_class2)
+  y<-rep(c(1,2),c(n1, n2))
+  df<-as.data.frame(cbind(x,y))
+  names(df)<-c(paste0("x",1:p),"y")
+  return(df)
+  }
+```
+
+This is the generation of data portion. 
+```{r}
+train_set_1_50_samples <- gen_data(50)
+train_set_2_10000_samples <- gen_data(10000)
+test_set_1_10000_samples <- gen_data(10000)
+
+train_set_1_50_samples
+train_set_2_10000_samples
+test_set_1_10000_samples
+```
+
+Convert y output variable of 1/2 to 0/1 for logistic regression. Keep old column create new column
+```{r}
+
+train_set_1_50_samples$y_updated <- ifelse(train_set_1_50_samples$y ==2, 1, 0)
+train_set_2_10000_samples$y_updated <- ifelse(train_set_2_10000_samples$y ==2, 1, 0)
+test_set_1_10000_samples$y_updated <- ifelse(test_set_1_10000_samples$y == 2, 1, 0)
+```
+
+A logistic regression model and LDA model is trained using 50 samples
+
+```{r}
+logistic_regression_model <- glm(y_updated ~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 + x11 + x12 + x13 + x14 + x15, data = train_set_1_50_samples, family=binomial)
+linear_discriminant_model <- lda(y_updated ~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 + x11 + x12 + x13 + x14 + x15, data = train_set_1_50_samples)
+```
+
+LDA and logistic regression is used to predict classifications of 10000 test samples
+```{r}
+lr_classifications <- predict(logistic_regression_model, test_set_1_10000_samples, type="response")
+lr_classes <- ifelse(lr_classifications>0.5, 1, 0)
+lda_classifications <- predict(linear_discriminant_model,test_set_1_10000_samples)
+lda_classes <- lda_classifications$class
+
+```
+
+The performance is measured by comparing lr and lda classes with actual labels.
+```{r}
+lr_performance = mean(lr_classes == test_set_1_10000_samples[["y_updated"]])
+lda_performance = mean(lda_classes == test_set_1_10000_samples[["y_updated"]])
+```
+
+Accuracy is printed
+```{r}
+cat("LR performance in terms of accuracy on test set:", lr_performance, "\n")
+cat("LDA performance in terms of accuracy on test set:", lda_performance, "\n")
+```
+
+Linear discriminant and logistic regression are trained using 10000 samples and classes from test set are predicted accordingly. 
+```{r}
+
+logistic_regression_model_large <- glm(y_updated ~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 + x11 + x12 + x13 + x14 + x15, data = train_set_2_10000_samples, family=binomial)
+linear_discriminant_model_large <- lda(y_updated ~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 + x11 + x12 + x13 + x14 + x15, data = train_set_2_10000_samples)
+
+lr_classifications_large <- predict(logistic_regression_model_large, test_set_1_10000_samples, type="response")
+lr_classes_large <- ifelse(lr_classifications>0.5, 1, 0)
+lda_classifications_large <- predict(linear_discriminant_model,test_set_1_10000_samples)
+lda_classes_large <- lda_classifications$class
+
+lr_performance_large = mean(lr_classes_large == test_set_1_10000_samples[["y_updated"]])
+lda_performance_large = mean(lda_classes_large == test_set_1_10000_samples[["y_updated"]])
+
+cat("LR performance in terms of accuracy on test set:", lr_performance_large, "\n")
+cat("LDA performance in terms of accuracy on test set:", lda_performance_large, "\n")
+```
+
+The average accuracy is calculated over 100 runs for the large train set. 
+```{r}
+lr_100_accuracies <- numeric(100)
+lda_100_accuracies <- numeric(100)
+
+for (i in 1:100) {
+  
+logistic_regression_model_large <- glm(y_updated ~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 + x11 + x12 + x13 + x14 + x15, data = train_set_2_10000_samples, family=binomial)
+  
+linear_discriminant_model_large <- lda(y_updated ~ x1 + x2 + x3, data = train_set_2_10000_samples)
+
+lr_classifications_large <- predict(logistic_regression_model_large, test_set_1_10000_samples, type="response")
+lr_classes_large <- ifelse(lr_classifications>0.5, 1, 0)
+lda_classifications_large <- predict(linear_discriminant_model,test_set_1_10000_samples)
+lda_classes_large <- lda_classifications$class
+  
+lr_performance_large = mean(lr_classes_large == test_set_1_10000_samples[["y_updated"]])
+lda_performance_large = mean(lda_classes_large == test_set_1_10000_samples[["y_updated"]])
+  
+lr_100_accuracies[i] <- lr_performance_large
+lda_100_accuracies[i] <- lda_performance_large
+}
+
+average_over_100_lr_accuracy <- mean(lr_100_accuracies)
+average_over_100_lda_accuracy <- mean(lda_100_accuracies)
+
+cat("Average LR performance in terms of accuracy on test set over 100 runs:", average_over_100_lr_accuracy, "\n")
+cat("Average LDA performance in terms of accuracy on test set over 100 runs:", average_over_100_lda_accuracy, "\n")
+
+```
+The average accuracy is calculated over 100 runs for the small train set. 
+
+```{r}
+lr_100_accuracies_small <- numeric(100)
+lda_100_accuracies_small <- numeric(100)
+
+
+for (i in 1:100) {
+  
+logistic_regression_model_small <- glm(y_updated ~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 + x11 + x12 + x13 + x14 + x15, data = train_set_1_50_samples, family=binomial)
+linear_discriminant_model_small <- lda(y_updated ~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 + x11 + x12 + x13 + x14 + x15, data = train_set_1_50_samples)
+
+lr_classifications_small <- predict(logistic_regression_model, test_set_1_10000_samples, type="response")
+lr_classes_small <- ifelse(lr_classifications>0.5, 1, 0)
+lda_classifications_small <- predict(linear_discriminant_model,test_set_1_10000_samples)
+lda_classes_small <- lda_classifications_small$class
+  
+  
+lr_performance_small = mean(lr_classes_small == test_set_1_10000_samples[["y_updated"]])
+lda_performance_small = mean(lda_classes_small == test_set_1_10000_samples[["y_updated"]])
+  
+lr_100_accuracies_small[i] <- lr_performance_small
+lda_100_accuracies_small[i] <- lda_performance_small
+}
+
+average_over_100_lr_accuracy_small <- mean(lr_100_accuracies_small)
+average_over_100_lda_accuracy_small <- mean(lda_100_accuracies_small)
+
+cat("Average LR performance in terms of accuracy on test set over 100 runs:", average_over_100_lr_accuracy_small, "\n")
+cat("Average LDA performance in terms of accuracy on test set over 100 runs:", average_over_100_lda_accuracy_small, "\n")
+```
+
