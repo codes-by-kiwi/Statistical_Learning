@@ -1,0 +1,73 @@
+---
+title: "Support Vector Machines using Boston Dataset"
+output: pdf_document
+date: "2025-04-03"
+---
+
+```{r setup, include=FALSE}
+library("MASS")
+data(Boston)
+```
+
+```{r}
+head(Boston)
+```
+
+
+```{r Boston test and train}
+set.seed(42)
+test <- sample(1:nrow(Boston), size = 100)
+train <- which(!(1:nrow(Boston)) %in% test)
+```
+
+```{r}
+library("e1071")
+cost <- c(.001, .01, .1, 1, 10)
+epsilon <- c(.001, .01, .1, 1)
+set.seed(42)
+tune.out <- tune(svm, medv~
+., data = Boston[train, ], kernel = "linear",
+ranges = list(cost = cost, epsilon = epsilon))
+```
+
+```{r}
+library("ggplot2")
+perf <- tune.out$performances
+perf$cost <- factor(perf$cost)
+ggplot(perf) + geom_line(aes(epsilon, error, group=cost, color=cost)) +
+scale_x_log10()
+```
+
+```{r}
+tune.out$best.parameters
+```
+
+```{r}
+cost <- c(.005, .01, .025, .05, .1, .5, 1, 10)
+epsilon <- c(.001, .005, .0075, .01, .025, .05, .1, .5, .75, .9, 1)
+tune.out <- tune(svm, medv~
+., data = Boston[train, ], kernel = "linear",
+ranges = list(cost = cost, epsilon = epsilon))
+tune.out$best.parameters
+perf <- tune.out$performances
+perf$cost <- factor(perf$cost)
+ggplot(perf) + geom_line(aes(epsilon, error, group=cost, color=cost)) +
+scale_x_log10() + scale_y_log10()
+```
+
+```{r}
+best_cost <- tune.out$best.parameters$cost
+best_epsilon <- tune.out$best.parameters$epsilon
+
+SVR <- svm(medv ~ ., data = Boston[train, ], kernel = "linear", 
+                 cost = best_cost, epsilon = best_epsilon)
+
+predictions <- predict(SVR, newdata = Boston[test, ])
+
+actual_y_values <- Boston[test, "medv"]
+mse <- mean((predictions - actual_y_values)^2)
+mae <- mean(abs(predictions - actual_y_values))
+
+print(paste("Mean Squared Error (MSE):", mse))
+print(paste("Mean Absolute Error (MAE):", mae))
+```
